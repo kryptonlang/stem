@@ -8,7 +8,7 @@ build-linux/
 *.log
 *.msix
 *.xml
-
+.DS_STORE
 stem-gui
 stem
 stem.app/
