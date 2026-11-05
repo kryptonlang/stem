@@ -1189,10 +1189,10 @@ func stemStripAnsi(s) {
       i = i + 1
       if i < n { if substring(s, i, i + 1) == "[" {
         i = i + 1
-        let go = 1
-        while go == 1 {
-          if i >= n { go = 0 }
-          else { let c = charCode(substring(s, i, i + 1))  i = i + 1  if c >= 64 { if c <= 126 { go = 0 } } }
+        let scanning = 1
+        while scanning == 1 {
+          if i >= n { scanning = 0 }
+          else { let c = charCode(substring(s, i, i + 1))  i = i + 1  if c >= 64 { if c <= 126 { scanning = 0 } } }
         }
       } }
     } else { out = out + ch  i = i + 1 }
