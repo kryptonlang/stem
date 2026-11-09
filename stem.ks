@@ -842,14 +842,30 @@ func sgrIndex(body) {
 
 func appendRunTo(acc, text, fg, bg, font) {
   if len(text) == 0 { emit "1" }
+  // PTY reads can end between UTF-8 bytes despite escape buffering. Cocoa
+  // returns nil for an invalid UTF-8 run; never pass that nil into
+  // NSAttributedString (it raises and terminates the app).
+  let native = nsString(text)
+  if native == 0 { emit "1" }
   let start = msg(acc, "length")
-  msg_1(acc, "appendAttributedString:", msg_1(msg(cls("NSAttributedString"), "alloc"), "initWithString:", nsString(text)))
+  msg_1(acc, "appendAttributedString:", msg_1(msg(cls("NSAttributedString"), "alloc"), "initWithString:", native))
   let span = msg(acc, "length") - start
   msg_4(acc, "addAttribute:value:range:", nsString("NSColor"), fg, start, span)
   msg_4(acc, "addAttribute:value:range:", nsString("NSFont"), font, start, span)
   let shadow = cocoaGetAssocKey(appH(), "stem.textshadow")
   if shadow != 0 { msg_4(acc, "addAttribute:value:range:", nsString("NSShadow"), shadow, start, span) }
   if bg != 0 { msg_4(acc, "addAttribute:value:range:", nsString("NSBackgroundColor"), bg, start, span) }
+  emit "1"
+}
+func appendCursorCell(acc, text, fg, bg, font) {
+  let start = msg(acc, "length")
+  appendRunTo(acc, stemCursorGlyph(), cocoaGetAssocKey(appH(), "stem.cursorcolor"), bg, font)
+  // Overlay the real cell instead of replacing it. Negative monospace kerning
+  // puts the character back under the thin bar without consuming a column.
+  let cellw = cocoaNumberVal(cocoaGetAssocKey(appH(), "stem.cellw1000")) / 1000
+  if cellw < 1 { cellw = 1 }
+  msg_4(acc, "addAttribute:value:range:", nsString("NSKern"), cocoaNumber(0 - cellw), start, 1)
+  appendRunTo(acc, text, fg, bg, font)
   emit "1"
 }
 func stemCursorGlyph() {
@@ -867,7 +883,8 @@ func renderSnapshot(snap, deflt, font, cr, cc, cursorOn) {
   let nl = fromCharCode(10)
   let n = len(snap)
   let i = 0
-  let run = ""
+  let run = sbNew()
+  let runLen = 0
   let fg = deflt
   let bg = 0
   let vrow = 0
@@ -876,7 +893,7 @@ func renderSnapshot(snap, deflt, font, cr, cc, cursorOn) {
   while i < n {
     let c = snap[i]
     if c == esc {
-      if len(run) > 0 { appendRunTo(acc, run, fg, bg, font)  run = "" }
+      if runLen > 0 { appendRunTo(acc, sbToString(run), fg, bg, font)  run = sbNew()  runLen = 0 }
       i = i + 1
       if i < n {
         if snap[i] == "[" {
@@ -908,15 +925,16 @@ func renderSnapshot(snap, deflt, font, cr, cc, cursorOn) {
         // to the next rendered row; waiting until the end only works when the
         // cursor happens to be on the terminal's final physical row.
         if cursorOn == 1 { if curStart < 0 { if vrow == cr { if cc >= vcol {
-          if len(run) > 0 { appendRunTo(acc, run, fg, bg, font)  run = "" }
-          let pad = ""
+          if runLen > 0 { appendRunTo(acc, sbToString(run), fg, bg, font)  run = sbNew()  runLen = 0 }
+          let pad = sbNew()
+          let padLen = 0
           let k = vcol
-          while k < cc { pad = pad + " "  k = k + 1 }
-          if len(pad) > 0 { appendRunTo(acc, pad, fg, bg, font) }
+          while k < cc { pad = sbAppend(pad, " ")  padLen = padLen + 1  k = k + 1 }
+          if padLen > 0 { appendRunTo(acc, sbToString(pad), fg, bg, font) }
           appendRunTo(acc, stemCursorGlyph(), cocoaGetAssocKey(appH(), "stem.cursorcolor"), bg, font)
           curStart = 0
         } } } }
-        run = run + c  vrow = vrow + 1  vcol = 0  i = i + 1
+        run = sbAppend(run, c)  runLen = runLen + 1  vrow = vrow + 1  vcol = 0  i = i + 1
       }
       else {
         let cont = 0
@@ -925,30 +943,27 @@ func renderSnapshot(snap, deflt, font, cr, cc, cursorOn) {
         let isCur = 0
         if cont == 0 { if vrow == cr { if vcol == cc { isCur = 1 } } }
         if isCur == 1 && cursorOn == 1 {
-          if len(run) > 0 { appendRunTo(acc, run, fg, bg, font)  run = "" }
-          // bar cursor only over a blank cell; over a real char (e.g. an
-          // autosuggestion's first letter) keep the char so it stays visible.
-          // Always draw the configured cursor glyph. Keeping the underlying
-          // character made the cursor disappear over autosuggestions/text.
-          appendRunTo(acc, stemCursorGlyph(), cocoaGetAssocKey(appH(), "stem.cursorcolor"), bg, font)
+          if runLen > 0 { appendRunTo(acc, sbToString(run), fg, bg, font)  run = sbNew()  runLen = 0 }
+          appendCursorCell(acc, c, fg, bg, font)
           curStart = 0
-        } else { run = run + c }
+        } else { run = sbAppend(run, c)  runLen = runLen + 1 }
         if cont == 0 { vcol = vcol + 1 }
         i = i + 1
       }
     }
   }
-  if len(run) > 0 { appendRunTo(acc, run, fg, bg, font)  run = "" }
+  if runLen > 0 { appendRunTo(acc, sbToString(run), fg, bg, font)  run = sbNew()  runLen = 0 }
   // vertical bar cursor (ghostty-style). If not already drawn in-loop (curStart>=0),
   // the cursor was at end-of-line and got trimmed out of gridRender — pad to its
   // column on its row, draw the bar.
   if cursorOn == 1 { if curStart < 0 {
     if vrow == cr {
       if cc >= vcol {
-      let pad = ""
+      let pad = sbNew()
+      let padLen = 0
       let k = vcol
-      while k < cc { pad = pad + " "  k = k + 1 }
-      if len(pad) > 0 { appendRunTo(acc, pad, fg, bg, font) }
+      while k < cc { pad = sbAppend(pad, " ")  padLen = padLen + 1  k = k + 1 }
+      if padLen > 0 { appendRunTo(acc, sbToString(pad), fg, bg, font) }
       appendRunTo(acc, stemCursorGlyph(), cocoaGetAssocKey(appH(), "stem.cursorcolor"), bg, font)
       }
     }
@@ -963,7 +978,15 @@ func stemRepaintCursor(state, pane, cols, rows, fg, cursorOn) {
   let cp = gridCursor(state, cols, rows)
   let comma = indexOf(cp, ",")
   msg_1(cocoaArrayGet(views, pane), "setAttributedString:", renderSnapshot(gridRender(state, cols, rows), fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(cp, 0, comma)), toInt(substring(cp, comma + 1, len(cp))), cursorOn))
+  stemResetViewport(pane)
   msg_1(cocoaArrayGet(docs, pane), "setNeedsDisplay:", 1)
+  emit "1"
+}
+func stemResetViewport(pane) {
+  let scroll = cocoaArrayGet(cocoaGetAssocKey(appH(), "stem.pscrolls"), pane)
+  let clip = msg(scroll, "contentView")
+  msg_d2(clip, "scrollToPoint:", 0, 0)
+  msg_1(scroll, "reflectScrolledClipView:", clip)
   emit "1"
 }
 
@@ -1841,6 +1864,7 @@ just run {
       let rendered = gridRender(st0, c0, r0)
       cocoaSetAssocKey(app, "stem.lastrender", nsString(rendered))
       msg_1(cocoaArrayGet(pviews, 0), "setAttributedString:", renderSnapshot(rendered, fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(curp, 0, ci2)), toInt(substring(curp, ci2 + 1, len(curp))), cursorOn))
+      stemResetViewport(0)
     }
     // On a COLD first launch the login shell + p10k can take >5s to draw the
     // prompt; an idle prompt then sends no output to trigger a view repaint, so
@@ -1851,6 +1875,7 @@ just run {
       let cp = gridCursor(st0, c0, r0)
       let ck = indexOf(cp, ",")
       msg_1(cocoaArrayGet(pviews, 0), "setAttributedString:", renderSnapshot(gridRender(st0, c0, r0), fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(cp, 0, ck)), toInt(substring(cp, ck + 1, len(cp))), cursorOn))
+      stemResetViewport(0)
       // force the deferred draw (what a dock re-focus does): mark dirty + display
       msg_1(cocoaArrayGet(pdocs, 0), "setNeedsDisplay:", 1)
       msg(cocoaArrayGet(pdocs, 0), "display")
@@ -1869,6 +1894,7 @@ just run {
         let curp1 = gridCursor(st1, c1, r1)
         let cj = indexOf(curp1, ",")
         msg_1(cocoaArrayGet(pviews, 1), "setAttributedString:", renderSnapshot(gridRender(st1, c1, r1), fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(curp1, 0, cj)), toInt(substring(curp1, cj + 1, len(curp1))), cursorOn))
+        stemResetViewport(1)
       }
     }
     if pc >= 3 {
@@ -1884,6 +1910,7 @@ just run {
         let curp2 = gridCursor(st2, c2, r2)
         let ck = indexOf(curp2, ",")
         msg_1(cocoaArrayGet(pviews, 2), "setAttributedString:", renderSnapshot(gridRender(st2, c2, r2), fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(curp2, 0, ck)), toInt(substring(curp2, ck + 1, len(curp2))), cursorOn))
+        stemResetViewport(2)
       }
     }
     if pc >= 4 {
@@ -1899,6 +1926,7 @@ just run {
         let curp3 = gridCursor(st3, c3, r3)
         let cl = indexOf(curp3, ",")
         msg_1(cocoaArrayGet(pviews, 3), "setAttributedString:", renderSnapshot(gridRender(st3, c3, r3), fg, cocoaGetAssocKey(app, "stem.mono"), toInt(substring(curp3, 0, cl)), toInt(substring(curp3, cl + 1, len(curp3))), cursorOn))
+        stemResetViewport(3)
       }
     }
     if cursorOn != lastCursorOn {

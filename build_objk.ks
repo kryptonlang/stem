@@ -44,7 +44,12 @@ just run {
     }
 
     kp("==> compiling stem.ks (objk, pure Krypton)")
-    exec("env KRYPTON_ROOT=\"" + root + "\" \"" + fe + "\" stem.ks > /tmp/stem.kir")
+    // stem.ks keeps the GUI self-contained for source browsing, while term.k
+    // is the canonical, tested VT core. Build with the current term.k so the
+    // macOS app cannot drift behind fixes for progress redraws, cursor motion,
+    // bounded buffer mutation, or incomplete CSI handling.
+    exec("(sed -n '1,5p' stem.ks; sed '/^module stem_term$/d' term.k; sed -n '/^\\/\\/ ── objk GUI/,$p' stem.ks) > /tmp/stem-build.ks")
+    exec("env KRYPTON_ROOT=\"" + root + "\" \"" + fe + "\" /tmp/stem-build.ks > /tmp/stem.kir")
     exec("\"" + host + "\" --ir /tmp/stem.kir /tmp/stem.bin >/dev/null")
 
     let app = "dist/stem.app"

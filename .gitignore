@@ -8,21 +8,16 @@ build-linux/
 *.log
 *.msix
 *.xml
-.DS_STORE
+.DS_Store
 stem-gui
-stem
 stem.app/
 /make_icon
-.DS_Store
 /releases/
 /stem
 /stem-gui
 
 # objk build outputs
 dist/
-kryoterm
-kryoterm-gui
-kryoterm.app/
 # Windows .NET preview build outputs
 **/bin/
 **/obj/
