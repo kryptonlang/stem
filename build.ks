@@ -36,8 +36,8 @@ just run {
             let r = "../krypton"
             let seedPath = r + "/bootstrap/" + seed
             if isExec(seedPath) != "yes" {
-                kp("build.ks: no 'kcc' on PATH and no " + seedPath)
-                kp("  Install Krypton (brew install t3m3d/krypton/krypton) or set KRYPTON_ROOT.")
+                print("build.ks: no 'kcc' on PATH and no " + seedPath)
+                print("  Install Krypton (brew install t3m3d/krypton/krypton) or set KRYPTON_ROOT.")
                 emit 1
             }
             kcc = "env KRYPTON_ROOT=\"" + r + "\" \"" + seedPath + "\""
@@ -51,20 +51,20 @@ just run {
         let a = arg(toStr(i))
         if a == "--run" { run = 1 }
         if a == "--k"   { src = "run.k" }
-        if a == "-h"     { kp("usage: kcc -r build.ks [--run] [--k]"); emit 0 }
-        if a == "--help" { kp("usage: kcc -r build.ks [--run] [--k]"); emit 0 }
+        if a == "-h"     { print("usage: kcc -r build.ks [--run] [--k]"); emit 0 }
+        if a == "--help" { print("usage: kcc -r build.ks [--run] [--k]"); emit 0 }
         i = i + 1
     }
 
-    kp("build.ks: " + src + " -> stem")
+    print("build.ks: " + src + " -> stem")
     let out = exec(kcc + " --native " + src + " -o stem 2>&1")
-    if out != "" { kp(out) }
+    if out != "" { print(out) }
     if os == "Darwin" { exec("codesign -s - -f stem >/dev/null 2>&1") }
 
     if isExec("stem") != "yes" {
-        kp("build.ks: build failed — stem not produced")
+        print("build.ks: build failed — stem not produced")
         emit 1
     }
-    kp("build.ks: built stem (" + trim(exec("wc -c < stem | tr -d ' '")) + " bytes)")
+    print("build.ks: built stem (" + trim(exec("wc -c < stem | tr -d ' '")) + " bytes)")
     if run == 1 { exec("./stem") }
 }

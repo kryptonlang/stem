@@ -34,7 +34,7 @@ just run {
     let out = "stem.exe"
     let manifest = "stem_win.exe.manifest"
 
-    kp("[1/3] kcc compile -> " + out)
+    print("[1/3] kcc compile -> " + out)
     // Krypton's exec() on Windows wraps the command in `cmd /c "..."`; if WE
     // also quote the kcc path here (`"C:/krypton/kcc.exe"`), cmd sees
     // `cmd /c ""C:/krypton/kcc.exe" stem_win.ks ..."` and the double-double-
@@ -45,13 +45,13 @@ just run {
     // trailing `2>&1` against that wrapper made cmd reinterpret kcc's stderr
     // text as a fresh command ("'The' is not recognized ...").
     let c = exec(kcc + " stem_win.ks -o " + out)
-    if c != "" { kp(c) }
+    if c != "" { print(c) }
     // Fail loudly if the compile didn't drop the binary, rather than
     // pretending later steps succeeded.
     let check = trim(exec("test -f " + out + " && echo ok || echo no"))
-    if check != "ok" { kp("FAIL: " + out + " not produced -- aborting")  exit(1) }
+    if check != "ok" { print("FAIL: " + out + " not produced -- aborting")  exit(1) }
 
-    kp("[2/3] patch PE Subsystem CUI->GUI")
+    print("[2/3] patch PE Subsystem CUI->GUI")
     // PE header offset = u32 LE at file offset 0x3c (60). Subsystem u16 lives at
     // peOff + 24 (COFF header) + 0x44 (offset of Subsystem in the optional hdr).
     // Krypton's exec uses cmd.exe on Windows -- it doesn't expand
@@ -63,13 +63,13 @@ just run {
     let peOff = trim(exec("bash -c \"od -An -tu4 -j60 -N4 " + out + " | tr -d ' '\""))
     let seek = toStr(toInt(peOff) + 92)
     exec("bash -c \"printf '\\\\002\\\\000' | dd of=" + out + " bs=1 seek=" + seek + " conv=notrunc 2>/dev/null\"")
-    kp("  subsystem -> 2 (Windows GUI)")
+    print("  subsystem -> 2 (Windows GUI)")
 
-    kp("[3/3] copy manifest sidecar")
+    print("[3/3] copy manifest sidecar")
     exec("cp \"" + manifest + "\" \"" + out + ".manifest\"")
-    kp("  " + out + ".manifest")
-    kp("")
-    kp("OK -> " + out)
+    print("  " + out + ".manifest")
+    print("")
+    print("OK -> " + out)
 
     let i = 0
     while i < argCount() {

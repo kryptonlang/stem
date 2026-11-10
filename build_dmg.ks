@@ -15,15 +15,15 @@ just run {
     let ver = trim(readFile("VERSION"))
     if argCount() > 0 && arg("0") != "" {
         if arg("0") != ver {
-            kp("build_dmg.ks: version " + arg("0") + " does not match VERSION " + ver)
+            print("build_dmg.ks: version " + arg("0") + " does not match VERSION " + ver)
             emit 1
         }
     }
-    if ver == "" { kp("build_dmg.ks: missing VERSION")  emit 1 }
+    if ver == "" { print("build_dmg.ks: missing VERSION")  emit 1 }
 
     // 1. Build the pure-Krypton objk app with the (released) kcc. build_objk.ks
     //    honors KRYPTON_ROOT; pass ours through so the child kcc sees it.
-    kp("==> building stem.app (objk, released kcc)")
+    print("==> building stem.app (objk, released kcc)")
     let kr = environ("KRYPTON_ROOT")
     let pre = ""
     if kr != "" { pre = "KRYPTON_ROOT=\"" + kr + "\" " }
@@ -32,10 +32,10 @@ just run {
     // 2. Fail closed if it isn't C-free.
     let nonsys = sh("otool -L dist/stem.app/Contents/MacOS/stem | tail -n +2 | grep -cv 'libobjc\\|Foundation\\|AppKit'")
     if nonsys != "0" {
-        kp("build_dmg.ks: ABORT — stem.app links " + nonsys + " non-system dylib(s); not C-free")
+        print("build_dmg.ks: ABORT — stem.app links " + nonsys + " non-system dylib(s); not C-free")
         emit 1
     }
-    kp("    stem.app is C-free (0 non-system links)")
+    print("    stem.app is C-free (0 non-system links)")
 
     // 3. Stage app + /Applications drag target, build a compressed DMG.
     let stage = "/tmp/stem-dmg-stage"
@@ -49,13 +49,13 @@ just run {
     exec("rm -f \"" + out + "\"")
     let rc = shellRun("diskutil image create from --format UDZO --volumeName stem \"" + stage + "\" \"" + out + "\"")
     if rc != "0" || sh("test -s \"" + out + "\" && echo yes") != "yes" {
-        kp("build_dmg.ks: disk image creation failed rc=" + rc)
+        print("build_dmg.ks: disk image creation failed rc=" + rc)
         exec("rm -rf \"" + stage + "\"")
         exit("1")
     }
     exec("rm -rf \"" + stage + "\"")
 
-    kp("==> built " + out + " (" + sh("du -h \"" + out + "\" | cut -f1") + ")")
-    kp("    sha256: " + sh("shasum -a 256 \"" + out + "\" | cut -d' ' -f1"))
-    kp("    next: gh release upload " + ver + " " + out + " --repo t3m3d/stem; bump Casks/stem.rb (version+sha256)")
+    print("==> built " + out + " (" + sh("du -h \"" + out + "\" | cut -f1") + ")")
+    print("    sha256: " + sh("shasum -a 256 \"" + out + "\" | cut -d' ' -f1"))
+    print("    next: gh release upload " + ver + " " + out + " --repo t3m3d/stem; bump Casks/stem.rb (version+sha256)")
 }

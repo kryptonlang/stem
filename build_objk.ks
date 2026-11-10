@@ -23,27 +23,27 @@ just run {
     let backend = root + "/compiler/macos_arm64/macho_arm64_self.k"
 
     if isFile(root + "/stdlib/cocoa.k") != "yes" {
-        kp("build_objk.ks: KRYPTON_ROOT='" + root + "' is not a Krypton dev checkout.")
-        kp("  set KRYPTON_ROOT=/path/to/krypton (needs compiler/macos_arm64 + stdlib + headers)")
+        print("build_objk.ks: KRYPTON_ROOT='" + root + "' is not a Krypton dev checkout.")
+        print("  set KRYPTON_ROOT=/path/to/krypton (needs compiler/macos_arm64 + stdlib + headers)")
         emit 1
     }
     if isExec(fe) != "yes" {
-        kp("build_objk.ks: missing " + fe)
+        print("build_objk.ks: missing " + fe)
         emit 1
     }
 
     // Ensure the macho codegen host is built from the current backend.
     if isExec(host) != "yes" {
-        kp("==> building macho_host from macho_arm64_self.k")
+        print("==> building macho_host from macho_arm64_self.k")
         exec("kcc --native \"" + backend + "\" -o \"" + host + "\"")
     } else {
         if newer(backend, host) == "yes" {
-            kp("==> rebuilding macho_host (backend changed)")
+            print("==> rebuilding macho_host (backend changed)")
             exec("kcc --native \"" + backend + "\" -o \"" + host + "\"")
         }
     }
 
-    kp("==> compiling stem.ks (objk, pure Krypton)")
+    print("==> compiling stem.ks (objk, pure Krypton)")
     // stem.ks keeps the GUI self-contained for source browsing, while term.k
     // is the canonical, tested VT core. Build with the current term.k so the
     // macOS app cannot drift behind fixes for progress redraws, cursor motion,
@@ -82,5 +82,5 @@ just run {
 
     exec("codesign -s - -f \"" + app + "/Contents/MacOS/stem\" >/dev/null 2>&1")
     exec("codesign -s - -f \"" + app + "\" >/dev/null 2>&1")
-    kp("==> built " + app + " (pure Krypton, no Obj-C source). Run:  open " + app)
+    print("==> built " + app + " (pure Krypton, no Obj-C source). Run:  open " + app)
 }

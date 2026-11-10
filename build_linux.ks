@@ -33,8 +33,8 @@ just run {
             let r = "../krypton"
             let seedPath = r + "/bootstrap/kcc_driver_linux_x86_64"
             if isExec(seedPath) != "yes" {
-                kp("build_linux.ks: no 'kcc' on PATH and no " + seedPath)
-                kp("  Set KRYPTON_ROOT to your krypton checkout, or install Krypton.")
+                print("build_linux.ks: no 'kcc' on PATH and no " + seedPath)
+                print("  Set KRYPTON_ROOT to your krypton checkout, or install Krypton.")
                 emit 1
             }
             kcc = "env KRYPTON_ROOT=\"" + r + "\" \"" + seedPath + "\""
@@ -51,13 +51,13 @@ just run {
         i = i + 1
     }
 
-    kp("build_linux.ks: " + src + " -> stem")
+    print("build_linux.ks: " + src + " -> stem")
     let out = exec(kcc + " --native " + src + " -o stem 2>&1")
-    if out != "" { kp(out) }
+    if out != "" { print(out) }
     if isExec("stem") != "yes" {
-        kp("build_linux.ks: build failed — stem not produced")
+        print("build_linux.ks: build failed — stem not produced")
         emit 1
     }
-    kp("build_linux.ks: built stem (" + trim(exec("wc -c < stem | tr -d ' '")) + " bytes, static ELF)")
+    print("build_linux.ks: built stem (" + trim(exec("wc -c < stem | tr -d ' '")) + " bytes, static ELF)")
     if run == 1 { exec("./stem") }
 }

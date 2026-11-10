@@ -49,14 +49,14 @@ func renderIcon(folder, size, name) {
     let output = folder + "/" + name
     exec("sips -z " + toString(size) + " " + toString(size) + " \"" + source + "\" --out \"" + output + "\" >/dev/null")
     if trim(exec("test -s \"" + output + "\" && echo yes")) != "yes" {
-        kp("PNG resize failed: " + name)
+        print("PNG resize failed: " + name)
         exit("1")
     }
 }
 
 just run {
     let temporary = trim(exec("mktemp -d /tmp/stem-icon.XXXXXX"))
-    if temporary == "" { kp("Cannot create iconset")  exit("1") }
+    if temporary == "" { print("Cannot create iconset")  exit("1") }
     let folder = temporary + ".iconset"
     exec("mv \"" + temporary + "\" \"" + folder + "\"")
 
@@ -76,10 +76,10 @@ just run {
     // small big-endian chunk container, so assemble it directly from our PNGs.
     buildIcns(folder, output)
     if trim(exec("test -s \"" + output + "\" && echo yes")) != "yes" {
-        kp("ICNS assembly failed")
+        print("ICNS assembly failed")
         exit("1")
     }
     exec("mv \"" + output + "\" stem.icns")
     exec("rm -rf \"" + folder + "\"")
-    kp("built stem.icns")
+    print("built stem.icns")
 }

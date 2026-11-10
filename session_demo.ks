@@ -12,6 +12,6 @@ just run {
   ptyWrite(m, "echo stem-session-ok; exit" + nl)
   let raw = ptyDrain(m, 300)             // collect output (~1.5s)
   ptyClose(m)
-  kp("=== stem: live shell rendered through the grid (80x20) ===")
-  kp(renderGrid(raw, 80, 20))
+  print("=== stem: live shell rendered through the grid (80x20) ===")
+  print(renderGrid(raw, 80, 20))
 }

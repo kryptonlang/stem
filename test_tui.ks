@@ -4,8 +4,8 @@
 import "./term.k"
 
 func chk(name, got, want) {
-  if got == want { kp("PASS " + name) }
-  else { kp("FAIL " + name + " got[" + got + "] want[" + want + "]") }
+  if got == want { print("PASS " + name) }
+  else { print("FAIL " + name + " got[" + got + "] want[" + want + "]") }
 }
 
 func firstLine(s) {
@@ -95,5 +95,5 @@ just run {
   chk("utf-8 single cell", renderGrid("café", 6, 1), "café")
   chk("CUP positions", renderGrid(e + "[2;4HZ", 8, 2), nl + "   Z")
 
-  kp("--- done ---")
+  print("--- done ---")
 }
