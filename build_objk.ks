@@ -44,12 +44,19 @@ just run {
     }
 
     print("==> compiling stem.ks (objk, pure Krypton)")
+    // KBI (Krypton Binary Interface) fast ABI is opt-in: set STEMBUILD_KBI=1 to
+    // build with `kcc-arm64 --kbi` (macOS arm64 only). Default build is unchanged.
+    let kbiFlag = ""
+    if environ("STEMBUILD_KBI") == "1" {
+        kbiFlag = " --kbi"
+        print("==> STEMBUILD_KBI=1: building with KBI fast ABI")
+    }
     // stem.ks keeps the GUI self-contained for source browsing, while term.k
     // is the canonical, tested VT core. Build with the current term.k so the
     // macOS app cannot drift behind fixes for progress redraws, cursor motion,
     // bounded buffer mutation, or incomplete CSI handling.
     exec("(sed -n '1,5p' stem.ks; sed '/^module stem_term$/d' term.k; sed -n '/^\\/\\/ ── objk GUI/,$p' stem.ks) > /tmp/stem-build.ks")
-    exec("env KRYPTON_ROOT=\"" + root + "\" \"" + fe + "\" /tmp/stem-build.ks > /tmp/stem.kir")
+    exec("env KRYPTON_ROOT=\"" + root + "\" \"" + fe + "\"" + kbiFlag + " /tmp/stem-build.ks > /tmp/stem.kir")
     exec("\"" + host + "\" --ir /tmp/stem.kir /tmp/stem.bin >/dev/null")
 
     let app = "dist/stem.app"

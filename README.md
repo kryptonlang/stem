@@ -43,6 +43,10 @@ powerline/icon glyphs (configurable in `~/.config/stem/stem.conf`).
 
 ## Build from source
 
+Requires Krypton **2.5.0-alpha** or newer (`kcc --version`). Older toolchains
+miscompile enum payloads (e.g. `Event::Foo(x)`); stem's TUI core relies on
+them heavily.
+
 ### macOS
 
 The build scripts are KryptScript (`.ks`, run with `kcc -r`), not shell.
@@ -54,6 +58,50 @@ open dist/stem.app
 
 `build_objk.ks` compiles `stem.ks` straight to a Cocoa app through the
 Objective-K FFI. The result links only `libobjc`, Foundation, and AppKit.
+
+Optional: build against the Krypton Binary Interface (KBI) fast ABI instead
+of the classic FFI bridge (macOS arm64 only, opt-in):
+
+```bash
+STEMBUILD_KBI=1 kcc -r build_objk.ks
+```
+
+This passes `--kbi` to the frontend; the generated `stem.kir` carries a
+`; KBI: 1` marker and the codegen seeds `rBUMP` (x28) plus KBI variants of
+`__rt_alloc` and the foreign-call marshalling. The default build is
+byte-identical to before — KBI is strictly additive and still experimental.
+
+### Developing with socam
+
+[`socam`](https://github.com/t3m3d/socam) (the Krypton assistance CLI) works
+against this repo out of the box:
+
+```bash
+socam list .                    # enumerate the .k sources (term.k, ansi.k, ...)
+socam explain term.k            # IR stats + full IR for the VT grid engine
+socam explain run.k > /tmp/ir   # capture IR to a file for review
+socam grep "gridFeed" term.k    # literal line search
+socam watch run.ks stem-cli     # rebuild + relaunch the CLI bridge on save
+```
+
+Set `KRYPTON_ROOT=/path/to/krypton` (or have `/usr/local/krypton` installed)
+so socam can find `compiler/macos_arm64/kcc-arm64`. socam is local-only — no
+network, no AI backends.
+
+A running stem instance can also be driven through socam's live IPC bridge —
+opt-in only, since the notification channel is user-session wide:
+
+```bash
+STEM_SOCAM_BRIDGE=1 open dist/stem.app        # launch with the bridge armed
+socam repl dump                               # windows/panes/secure-entry + master fd
+socam repl border                             # force a full repaint of every pane
+socam repl reload                             # reload ~/.config/stem/stem.conf
+socam repl quit                               # terminate gracefully
+```
+
+Without `STEM_SOCAM_BRIDGE=1` the bridge is not installed and stem behaves
+exactly as before. (Requires socam ≥ 0.6.0 with the `sleepUs` argument-order
+fix in `core/repl.k`, otherwise `repl` blocks in the reply poll.)
 
 ### Linux
 

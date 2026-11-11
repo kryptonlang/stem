@@ -990,6 +990,59 @@ func stemResetViewport(pane) {
   emit "1"
 }
 
+// ── socam bridge (opt-in: STEM_SOCAM_BRIDGE=1) ───────────────────────────
+// Lets the local-only socam assistant probe/drive the running app:
+//   socam repl dump    — windows/panes/secure-entry status
+//   socam repl border  — force a full repaint of every terminal pane
+//   socam repl reload  — reload ~/.config/stem/stem.conf (same as the menu)
+//   socam repl quit    — terminate gracefully
+// Replies go to /tmp/socam.reply. Off by default; any local process could
+// post "socam/command" on NSDistributedNotificationCenter, so never install
+// this unless STEM_SOCAM_BRIDGE=1.
+func _socamBridgeHandler(self, cmdsel, notif) {
+  let cmd = nsToStr(msg(notif, "object"))
+  let app = appH()
+  let out = ""
+  if cmd == "dump" {
+    out = "windows=1 panes=" + paneCount() + " secure=" + brainFlagS("stem.secure", 0) + " master=" + stemMaster() + "\n"
+  } else if cmd == "border" {
+    let docs = cocoaGetAssocKey(app, "stem.pdocs")
+    let dn = cocoaArrayCount(docs)
+    let di = 0
+    while di < dn {
+      msg_1(cocoaArrayGet(docs, di), "setNeedsDisplay:", 1)
+      msg(cocoaArrayGet(docs, di), "display")
+      di = di + 1
+    }
+    msg(cocoaGetAssocKey(app, "stem.win"), "displayIfNeeded")
+    out = "repaint panes=" + dn + "\n"
+  } else if cmd == "reload" {
+    onStemReload(0, 0, 0)
+    out = "reload\n"
+  } else if cmd == "quit" {
+    out = "quit\n"
+  } else {
+    out = "unknown: " + cmd + "\n"
+  }
+  writeFile("/tmp/socam.reply", out)
+  if cmd == "quit" { msg_1(app, "terminate:", 0) }
+  emit 0
+}
+func installSocamBridge() {
+  let c = objc_lookUpClass("SocamBridge")
+  if c == 0 {
+    c = cocoaClassNew("SocamBridge")
+    if c == 0 { printErr("socam bridge: class alloc failed\n")  emit "0" }
+    if cocoaClassAddMethod(c, "socamCommand:", funcptr(_socamBridgeHandler), "v@:@") == "0" { printErr("socam bridge: addMethod failed\n")  emit "0" }
+    cocoaClassRegister(c)
+  }
+  let inst = cocoaNew(c)
+  let center = msg(cls("NSDistributedNotificationCenter"), "defaultCenter")
+  let _ = msg_4(center, "addObserver:selector:name:object:", inst, sel("socamCommand:"), nsString("socam/command"), 0)
+  printErr("socam bridge: listening for socam/command (STEM_SOCAM_BRIDGE=1)\n")
+  emit "1"
+}
+
 // ── menu handlers ───────────────────────────────────────────────────────
 func stemMaster() { emit cocoaNumberVal(cocoaGetAssocKey(appH(), "stem.master")) }
 func onStemNewWin(self, cmd, sender) { exec("open -na stem")  emit "1" }
@@ -1637,6 +1690,7 @@ just run {
   let m3 = stemForkPty(cols, rows, wrapper)
 
   let app = cocoaInit()
+  if environ("STEM_SOCAM_BRIDGE") == "1" { installSocamBridge() }
   cocoaSetAssocKey(app, "stem.cfgpath", nsString(cfgPath))
   let bar = cocoaMenuBar(app)
   // app menu (system bolds the first menu as the app name)
