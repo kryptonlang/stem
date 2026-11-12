@@ -63,13 +63,24 @@ Optional: build against the Krypton Binary Interface (KBI) fast ABI instead
 of the classic FFI bridge (macOS arm64 only, opt-in):
 
 ```bash
-STEMBUILD_KBI=1 kcc -r build_objk.ks
+kcc -r build_objk.ks --kbi
+# or, for backwards compatibility: STEMBUILD_KBI=1 kcc -r build_objk.ks
 ```
 
 This passes `--kbi` to the frontend; the generated `stem.kir` carries a
 `; KBI: 1` marker and the codegen seeds `rBUMP` (x28) plus KBI variants of
-`__rt_alloc` and the foreign-call marshalling. The default build is
-byte-identical to before — KBI is strictly additive and still experimental.
+`__rt_alloc` and the foreign-call marshalling. The two flavors never clobber
+each other: the default build stays at `dist/stem.app`, the KBI build lands
+in `dist/kbi/stem.app`.
+
+**KBI is experimental.** The KBI code path requires a macho codegen host
+built from the current `macho_arm64_self.k` backend; the classic prebuilt
+seed host ignores the marker and produces a classic binary. On some
+toolchain revisions the KBI app fails to launch at all. To avoid shipping a
+crashing bundle, `--kbi` builds are smoke-checked: the app is launched and
+must stay alive for ~15 seconds, otherwise the build fails loudly and the
+broken bundle is removed. Set `STEM_SKIP_SMOKE=1` to skip the check (not
+recommended).
 
 ### Developing with socam
 
@@ -94,6 +105,7 @@ opt-in only, since the notification channel is user-session wide:
 ```bash
 STEM_SOCAM_BRIDGE=1 open dist/stem.app        # launch with the bridge armed
 socam repl dump                               # windows/panes/secure-entry + master fd
+socam repl status                             # health check: stem version + active pane count
 socam repl border                             # force a full repaint of every pane
 socam repl reload                             # reload ~/.config/stem/stem.conf
 socam repl quit                               # terminate gracefully

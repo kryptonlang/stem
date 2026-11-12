@@ -993,6 +993,7 @@ func stemResetViewport(pane) {
 // ── socam bridge (opt-in: STEM_SOCAM_BRIDGE=1) ───────────────────────────
 // Lets the local-only socam assistant probe/drive the running app:
 //   socam repl dump    — windows/panes/secure-entry status
+//   socam repl status  — health check: app version + active pane count + master fd
 //   socam repl border  — force a full repaint of every terminal pane
 //   socam repl reload  — reload ~/.config/stem/stem.conf (same as the menu)
 //   socam repl quit    — terminate gracefully
@@ -1005,6 +1006,11 @@ func _socamBridgeHandler(self, cmdsel, notif) {
   let out = ""
   if cmd == "dump" {
     out = "windows=1 panes=" + paneCount() + " secure=" + brainFlagS("stem.secure", 0) + " master=" + stemMaster() + "\n"
+  } else if cmd == "status" {
+    let info = msg(msg(cls("NSBundle"), "mainBundle"), "infoDictionary")
+    let ver = nsToStr(msg_1(info, "objectForKey:", nsString("CFBundleShortVersionString")))
+    if ver == "" { ver = "0.1.0" }
+    out = "ok stem=" + ver + " panes=" + paneCount() + " master=" + stemMaster() + " secure=" + brainFlagS("stem.secure", 0) + "\n"
   } else if cmd == "border" {
     let docs = cocoaGetAssocKey(app, "stem.pdocs")
     let dn = cocoaArrayCount(docs)
