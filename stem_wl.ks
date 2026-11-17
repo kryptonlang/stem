@@ -33,6 +33,10 @@ func _wlFind(b, n, iface) {
 // ── minimal keysym(keycode) -> bytes for the shell ───────────────────────────
 // X11 keycodes (wlKeyToKc = evdev+8). Covers printable ASCII via a layout row
 // map + the essential control keys. Full keymap/layout = future.
+// X11-vestige (future-edit item): kc is an X11 keycode (evdev+8), not an evdev
+// code — migrate keycode grid to native evdev or xkbcommon keysyms if this
+// table is ever extended; see brain/linux/display.k and cortex_wl.k for the
+// identical pattern. Not an X11 dependency (no X protocol); constants only.
 func kKeyBytes(kc, shift, ctrl, alt) {
     let enter = fromCharCode(13)
     let bs = fromCharCode(127)
@@ -81,6 +85,9 @@ func kKeyBytes(kc, shift, ctrl, alt) {
 }
 
 // keycode -> character for the US layout home/number rows (MVP subset).
+// X11-vestige (future-edit item): kc is an X11 keycode grid (evdev+8), not an
+// evdev code. Migrate with xkbcommon if this map grows past US layout; constants
+// only, no X11 dependency. See cortex_wl.k / brain/linux/display.k.
 func kCharOf(kc, shift) {
     // letters: kc 24..33 = q..p ; 38..46 = a..; 52..58 = z.. ; use a table string.
     let row1 = "qwertyuiop"    // kc 24..33
@@ -239,17 +246,17 @@ func oscApply(s, pal) {
                 if ps == "11" { let c = parseOscColor(rest)  if c >= 0 { bgC = c } }
                 if ps == "12" { let c = parseOscColor(rest)  if c >= 0 { curC = c } }
                 if ps == "4" {
-                    let r2 = rest  let go = 1
-                    while go == 1 {
+                    let r2 = rest  let scan = 1
+                    while scan == 1 {
                         let s1 = indexOf(r2, ";")
-                        if s1 < 0 { go = 0 }
+                        if s1 < 0 { scan = 0 }
                         else {
                             let idx = toInt(substring(r2, 0, s1))
                             let after = substring(r2, s1 + 1, len(r2))
                             let s2 = indexOf(after, ";")
                             let colStr = after
                             if s2 >= 0 { colStr = substring(after, 0, s2)  r2 = substring(after, s2 + 1, len(after)) }
-                            else { go = 0 }
+                            else { scan = 0 }
                             let col = parseOscColor(colStr)
                             if col >= 0 { palSet(pal, idx, col) }
                         }
@@ -547,7 +554,9 @@ just run {
     let SURF = 9  let XS = 10  let TOP = 11   // sequential object ids, NO gaps
     wlGetRegistry(fd, REG)
     let rb = bufNew(8192)
-    let rn = wlRecvInto(fd, rb, 8192)
+    let SYNCB = 12
+    let rn = wlSyncRegistry(fd, SYNCB, rb, 8192)
+    if rn < 0 { print("stem: wayland registry handshake failed")  exit("1") }
     wlBind(fd, REG, _wlFind(rb, rn, "wl_compositor"), "wl_compositor", 4, COMP)
     wlBind(fd, REG, _wlFind(rb, rn, "wl_shm"), "wl_shm", 1, SHM)
     wlBind(fd, REG, _wlFind(rb, rn, "xdg_wm_base"), "xdg_wm_base", 1, WM)
@@ -574,7 +583,7 @@ just run {
     let pal = palInit()                // live 256-colour palette (OSC 4 overrides)
 
     let shift = 0  let ctrl = 0  let alt = 0
-    let nextId = 12  let prevBuf = 0  let prevPool = 0  let prevMfd = 0
+    let nextId = 13  let prevBuf = 0  let prevPool = 0  let prevMfd = 0
     let dirty = 1  let running = 1  let configured = 0
     let kicked = 0  let kickIn = 0  let kickArmed = 0   // debounced startup Ctrl-L once the shell settles
     let title = "stem"  let bell = 0
