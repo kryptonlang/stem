@@ -2,7 +2,7 @@
 pkgname=stem
 pkgver=0.1.0
 pkgrel=1
-pkgdesc="Krypton-native terminal emulator (no Qt, no GTK, no libX11 — speaks the X11 wire protocol directly)"
+pkgdesc="Krypton-native terminal emulator for Linux/Hyprland (Wayland), macOS, and Windows"
 arch=('x86_64' 'aarch64')
 url="https://github.com/t3m3d/stem"
 license=('MIT')
@@ -38,4 +38,12 @@ package() {
         "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
     install -Dm644 "$srcdir/$pkgname/README.md" \
         "$pkgdir/usr/share/doc/$pkgname/README.md"
+    install -Dm644 "$srcdir/$pkgname/stem.conf" \
+        "$pkgdir/usr/share/stem/stem.conf"
+    install -Dm644 "$srcdir/$pkgname/contrib/stem.desktop" \
+        "$pkgdir/usr/share/applications/stem.desktop"
+    install -Dm755 "$srcdir/$pkgname/contrib/stemctl" \
+        "$pkgdir/usr/bin/stemctl"
+    install -Dm644 "$srcdir/$pkgname/contrib/hyprland/stem-rules.conf" \
+        "$pkgdir/usr/share/stem/hyprland/stem-rules.conf"
 }

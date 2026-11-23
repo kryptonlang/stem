@@ -115,12 +115,19 @@ Without `STEM_SOCAM_BRIDGE=1` the bridge is not installed and stem behaves
 exactly as before. (Requires socam ≥ 0.6.0 with the `sleepUs` argument-order
 fix in `core/repl.k`, otherwise `repl` blocks in the reply poll.)
 
-### Linux
+### Linux (Hyprland / Wayland)
+
+STEM's Linux frontend is a pure-Krypton Wayland terminal (`stem_wl.ks`) focused on Hyprland/Kryptos workflows.
 
 ```bash
-kcc -r stem_wl.ks      # Wayland/Hyprland windowed frontend
-kcc -r build_linux.ks  # static CLI terminal engine
+kcc -r stem_wl.ks                    # run Wayland frontend directly
+kcc -r build_linux.ks --wl           # build ./stem-wl native ELF
+kcc -r build_linux.ks                # build ./stem CLI engine
 ```
+
+Linux keybinds (configurable): `Ctrl+Shift+D` split right, `Ctrl+Shift+E` split down, `Ctrl+Shift+O` focus next pane, `Ctrl+Shift+X` close pane, `Ctrl+Shift+S` swap panes, `Ctrl+Shift+P` command palette, `Ctrl+Shift+H` history, `Ctrl+Shift+R` reload config, `Ctrl+Shift+I` open config, `F11` fullscreen.
+
+Hyprland integration snippet: `contrib/hyprland/stem-rules.conf`. Desktop entry: `contrib/stem.desktop`. Control plane: `contrib/stemctl` (`stemctl reload`, `stemctl doctor`, `stemctl send ...`). Embeddable core wrapper: `stem_core.k`.
 
 ### Windows
 
@@ -188,46 +195,57 @@ point `KRYPTON_ROOT` at a krypton 2.4.0 install. It prints the sha256 + the
 
 ## Config
 
-`~/.config/stem/stem.conf` is the shared Windows/macOS/Linux configuration.
-Set `STEM_CONF` to an absolute path to use another file. Stem creates the file
-from its bundled, fully commented template on first launch; the macOS **Reload
-Configuration** menu applies fonts, core colors, cursor styling, title, and
-opacity without restarting. Shell, working-directory, grid, and layout changes
-apply to new windows.
+STEM uses easy plaintext config by default, with optional flat JSON for more structured setups:
+
+- **Default:** `~/.config/stem/stem.conf` (easy `key = value`, `#` comments)
+- **JSON:** `~/.config/stem/stem.json` or `config.json` (flat object; keys/values same as conf)
+- **Override:** `STEM_CONF=/absolute/path/to/stem.conf|stem.json`
+- **XDG:** respects `$XDG_CONFIG_HOME/stem/...`
+
+STEM creates a default config on first launch when missing. Canonical templates: [`stem.conf`](stem.conf) and [`contrib/config/stem.json`](contrib/config/stem.json).
 
 ```ini
-title = STEM - Krypton Terminal
+# Window / Hyprland
+title = STEM
+app_id = stem
+cols = 120
+rows = 32
+padding = 10
+opacity = 0.95
+
+# Shell / session
 shell = /bin/zsh
 working_directory = ~
 term = xterm-256color
+command_history = true
+history_file = ~/.config/stem/history
 
-width = 1120
-height = 740
-minimum_width = 480
-minimum_height = 280
-appearance = dark              # auto | dark | light
-titlebar_transparent = true
-center_on_launch = true
-start_fullscreen = false
-always_on_top = false
-window_shadow = true
-opacity = 0.80
+# Keybindings
+bind.copy = ctrl+shift+c
+bind.paste = ctrl+shift+v
+bind.reload_config = ctrl+shift+r
+bind.command_history = ctrl+shift+h
 
-font_family = MesloLGS Nerd Font
-font_size = 13.5
-padding = 10
-pane_gap = 2
-scrollbar = true
-
-cursor_style = bar             # bar | block | underline
-cursor_color = #8B5CF6
-foreground = #D8DAD4
-background = #05070C
+# Plugins
+plugins_enabled = true
+plugin_dir = ~/.config/stem/plugins
 ```
 
-The repository's [`stem.conf`](stem.conf) is the canonical reference containing
-every shared key, compatibility alias, interaction setting, and complete ANSI
-palette. Frontends safely ignore keys that are not implemented on that platform.
+### Plugins / extensions
+
+Plugins are executable hooks in `~/.config/stem/plugins/`. STEM emits events (`startup`, `command`, `bell`, `history_request`) with env vars and stdin payload; plugins can respond with stdout commands (`notify:`, `open:`, `write_pty:`, `reload_config`). See [`contrib/plugins/README.md`](contrib/plugins/README.md).
+
+### Command history
+
+When `command_history = true`, STEM records entered commands to `history_file` (default `~/.config/stem/history`) with timestamps. `Ctrl+Shift+H` opens the history overlay; `Ctrl+Shift+P` opens the command palette.
+
+### Automation / diagnostics
+
+- `control_file` + `contrib/stemctl` provide a simple control plane (`reload`, `quit`, `notify`, `title`, `send`, `doctor`).
+- `debug_overlay` / `fps_overlay` / `perf_log` expose runtime diagnostics.
+- `restore_session` saves basic session state on exit.
+
+Frontends safely ignore keys they do not implement on that platform.
 
 `⌘A` selects all · `⌘-click` opens underlined URLs · ⇧PageUp/Down also scrolls.
 

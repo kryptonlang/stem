@@ -360,6 +360,30 @@ func _utf8Len(c) {
     emit 1
 }
 
+func _utf8Cp(s, i, clen) {
+    let c0 = toInt(charCode(substring(s, i, i + 1)))
+    if clen == 1 { emit c0 }
+    let c1 = toInt(charCode(substring(s, i + 1, i + 2))) - 128
+    if clen == 2 { emit (c0 - 192) * 64 + c1 }
+    let c2 = toInt(charCode(substring(s, i + 2, i + 3))) - 128
+    if clen == 3 { emit (c0 - 224) * 4096 + c1 * 64 + c2 }
+    let c3 = toInt(charCode(substring(s, i + 3, i + 4))) - 128
+    if clen == 4 { emit (c0 - 240) * 262144 + c1 * 4096 + c2 * 64 + c3 }
+    emit c0
+}
+
+func _isCombining(cp) {
+    if cp >= 768 && cp <= 879 { emit 1 }       // Combining Diacritical Marks
+    if cp >= 1155 && cp <= 1161 { emit 1 }
+    if cp >= 7616 && cp <= 7679 { emit 1 }
+    if cp >= 8400 && cp <= 8432 { emit 1 }
+    if cp >= 65024 && cp <= 65039 { emit 1 }   // Variation Selectors
+    if cp == 8205 { emit 1 }                   // ZWJ
+    if cp == 8204 { emit 1 }                   // ZWNJ
+    if cp == 65279 { emit 1 }                  // ZWNBSP/BOM
+    emit 0
+}
+
 // gridNew(cols, rows) — a fresh blank packed grid state.
 func gridNew(cols, rows) {
     let total = cols * rows
@@ -394,7 +418,7 @@ func _decGfx(c) {
     emit c
 }
 
-func gridInitMeta() { emit "0,0,257,0,0,257,0,0,0,0,0,0,0,1,0,0,0" + fromCharCode(1) + fromCharCode(1) }
+func gridInitMeta() { emit "0,0,257,0,0,257,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0" + fromCharCode(1) + fromCharCode(1) }
 func gridBlank(gb, ab, bb, ub, cols, rows) {               // fill persistent plane buffers blank
     let total = cols * rows
     _blankCellsB(gb, 0, total)  _fillB(ab, 0, total, 1)  _fillB(bb, 0, total, 1)  _fillB(ub, 0, total, 0)
@@ -449,6 +473,10 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
     let scrollBot = _cf(tail, 19)        // DECSTBM scroll region bottom; (0,0) = full screen
     let nowrap = _cf(tail, 20)           // DECAWM off (1) — last column overwrites instead of wrapping
     let decom = _cf(tail, 21)            // DECOM origin mode — CUP relative to the scroll region
+    let curLink = _cf(tail, 22)          // OSC 8 active hyperlink id (0 = none)
+    let sync2026 = _cf(tail, 23)         // DEC 2026 synchronized output active
+    let osc133 = _cf(tail, 24)           // OSC 133 prompt state: 0 none,1 A,2 B,3 C,4 D
+    let kittyKb = _cf(tail, 25)          // kitty keyboard protocol flags
     let scrolled = ""                    // rows scrolled off THIS feed (reset each call)
     let bell = 0                         // bare BEL (0x07) seen THIS feed (reset each call)
     let n = len(s)
@@ -581,6 +609,8 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                                 if mode == 25 { cvis = on }                                        // cursor show/hide
                                 if mode == 2004 { pasteMode = on }                                 // bracketed paste
                                 if mode == 1004 { focusMode = on }                                 // focus reporting
+                                if mode == 2004 { pasteMode = on }                                 // bracketed paste
+                                if mode == 2026 { sync2026 = on }                                  // DEC 2026 synchronized output
                                 if mode == 7 { if on == 1 { nowrap = 0 } else { nowrap = 1 } }      // DECAWM autowrap
                                 if mode == 6 { decom = on  cc = 0  if on == 1 { cr = scrollTop } else { cr = 0 } }  // DECOM origin
                                 if mode == 1049 || mode == 1047 || mode == 47 {                    // alt screen
@@ -611,18 +641,41 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                         i = j + 1
                     }
                 } else {
-                    if k == 93 {                         // ']' → OSC: skip to BEL/ST
-                        let j = i + 2
+                    if k == 93 {                         // ']' → OSC
+                        let oscStart = i + 2
+                        let j = oscStart
                         let done = 0
+                        let oscEnd = n
+                        let nextI = n
                         while j < n && done == 0 {
                             let cj = charCode(substring(s, j, j + 1))
-                            if cj == 7 { done = 1  i = j + 1 }
+                            if cj == 7 { done = 1  oscEnd = j  nextI = j + 1 }
                             else {
-                                if cj == 27 && j + 1 < n && charCode(substring(s, j + 1, j + 2)) == 92 { done = 1  i = j + 2 }
+                                if cj == 27 && j + 1 < n && charCode(substring(s, j + 1, j + 2)) == 92 { done = 1  oscEnd = j  nextI = j + 2 }
                                 else { j = j + 1 }
                             }
                         }
                         if done == 0 { i = n }
+                        else {
+                            let oscBody = substring(s, oscStart, oscEnd)
+                            // OSC 8 ; params ; uri  (hyperlinks)
+                            if len(oscBody) >= 2 && charCode(substring(oscBody, 0, 1)) == 56 && charCode(substring(oscBody, 1, 2)) == 59 {
+                                let rest8 = substring(oscBody, 2, len(oscBody))
+                                let semi8 = indexOf(rest8, ";")
+                                let uri8 = rest8
+                                if semi8 >= 0 { uri8 = substring(rest8, semi8 + 1, len(rest8)) }
+                                if len(uri8) == 0 { curLink = 0 } else { curLink = 1 }
+                            }
+                            // OSC 133 ; A/B/C/D  (prompt marks)
+                            if len(oscBody) >= 5 && charCode(substring(oscBody, 0, 1)) == 49 && charCode(substring(oscBody, 1, 2)) == 51 && charCode(substring(oscBody, 2, 3)) == 51 && charCode(substring(oscBody, 3, 4)) == 59 {
+                                let mk = substring(oscBody, 4, 5)
+                                if mk == "A" { osc133 = 1 }
+                                if mk == "B" { osc133 = 2 }
+                                if mk == "C" { osc133 = 3 }
+                                if mk == "D" { osc133 = 4 }
+                            }
+                            i = nextI
+                        }
                     } else {
                         if k == 40 || k == 41 || k == 42 || k == 43 {
                             // charset designation: ESC ( / ) / * / + <final> (3-byte).
@@ -682,6 +735,10 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                             if c >= 32 {                                         // printable (incl UTF-8)
                                 let clen = _utf8Len(c)
                                 if i + clen > n { clen = n - i }
+                                let cp = _utf8Cp(s, i, clen)
+                                if _isCombining(cp) == 1 {
+                                    i = i + clen
+                                } else {
                                 if pw == 1 {                                     // deferred wrap from last col
                                     cc = 0  pw = 0
                                     let eB2 = scrollBot  if scrollTop == 0 && scrollBot == 0 { eB2 = rows - 1 }
@@ -712,10 +769,11 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
                                 _putCellB(gb, idx, glyph)
                                 bufSetByte(ab, idx, pfg)
                                 bufSetByte(bb, idx, pbg)
-                                bufSetByte(ub, idx, pul)
+                                bufSetByte(ub, idx, pul + curLink * 2)
                                 if cc >= cols - 1 { if nowrap == 0 { pw = 1 } }  // last col: defer wrap (unless DECAWM off)
                                 else { cc = cc + 1 }
                                 i = i + clen
+                                }
                             } else { if c == 7 { bell = 1 }  i = i + 1 }          // BEL (bell) / other control byte
                         }
                     }
@@ -724,7 +782,7 @@ func gridFeedB(gb, ab, bb, ub, meta, s, cols, rows) {
         }
     }
 
-    emit cr + "," + cc + "," + pen + "," + scr + "," + scc + "," + spen + "," + pw + "," + bell + "," + mlevel + "," + msgr + "," + altActive + "," + savedAltCr + "," + savedAltCc + "," + cvis + "," + cshape + "," + pasteMode + "," + focusMode + "," + g0gfx + "," + scrollTop + "," + scrollBot + "," + nowrap + "," + decom + fromCharCode(1) + scrolled + fromCharCode(1) + savedGrids
+    emit cr + "," + cc + "," + pen + "," + scr + "," + scc + "," + spen + "," + pw + "," + bell + "," + mlevel + "," + msgr + "," + altActive + "," + savedAltCr + "," + savedAltCc + "," + cvis + "," + cshape + "," + pasteMode + "," + focusMode + "," + g0gfx + "," + scrollTop + "," + scrollBot + "," + nowrap + "," + decom + "," + curLink + "," + sync2026 + "," + osc133 + "," + kittyKb + fromCharCode(1) + scrolled + fromCharCode(1) + savedGrids
 }
 
 // _renderRow(grid, attr, battr, base, cols) — one cell-row (base = row*cols)
@@ -1016,6 +1074,12 @@ func gridBellM(meta) {
 func gridPasteM(meta) {                  // 1 if bracketed paste (DECSET 2004) is on
     emit _cf(substring(meta, 0, indexOf(meta, fromCharCode(1))), 15)
 }
+func gridAltM(meta) { emit _cf(substring(meta, 0, indexOf(meta, fromCharCode(1))), 10) }
+func gridFocusM(meta) { emit _cf(substring(meta, 0, indexOf(meta, fromCharCode(1))), 16) }
+func gridSync2026M(meta) { emit _cf(substring(meta, 0, indexOf(meta, fromCharCode(1))), 23) }
+func gridOsc133M(meta) { emit _cf(substring(meta, 0, indexOf(meta, fromCharCode(1))), 24) }
+func gridCurLinkM(meta) { emit _cf(substring(meta, 0, indexOf(meta, fromCharCode(1))), 22) }
+func gridKittyKbM(meta) { emit _cf(substring(meta, 0, indexOf(meta, fromCharCode(1))), 25) }
 func gridMouseM(meta) {                  // "mlevel,msgr": app mouse tracking + SGR(1006) flag
     let tail = substring(meta, 0, indexOf(meta, fromCharCode(1)))
     emit _cf(tail, 8) + "," + _cf(tail, 9)

@@ -20,22 +20,23 @@ and also treats Windows as a first-class platform.
 | Scrollback + find | Yes | Yes | Yes | Yes | Prompt navigation |
 | Selection + clipboard | Rich word/line/command selection | Yes | Yes | Viewport word/line selection | Cross-history selection |
 | Mouse + focus reporting | Yes | Yes: SGR 1006 + focus | Yes (shared core) | Not yet | Windows mouse/focus events |
-| Multiple windows / tabs / splits | Yes | Yes: windows, tabs, two-pane splits | Single session | Tabs + nested splits | Layout persistence, then Linux tabs/splits |
+| Multiple windows / tabs / splits | Yes | Yes: windows, tabs, two-pane splits | Basic 2-pane splits (vert/horiz), focus/close; no tabs yet | Tabs + nested splits | Tabs, layout persistence, richer split management |
 | Resize / reflow | Stable pixel and cell resizing | Cell resize; no text reflow | Cell resize | Cell resize | Shared reflow model and stress tests |
-| Persistent configuration / themes | Extensive | Yes + settings helper + hot reload | Yes | Yes + settings GUI | Shared schema + named themes |
+| Persistent configuration / themes | Extensive | Yes + settings helper + hot reload | Yes + easy `~/.config/stem/stem.conf`, keybinds, history, plugin config | Yes + settings GUI | Shared schema + named themes |
 | Native UI | SwiftUI/AppKit + GTK | Cocoa | Wayland | WPF | Preserve native platform surfaces |
 | Rendering | Metal / OpenGL | Custom view + attributed text | CPU framebuffer | CPU WPF | Krypton-owned cell renderer; then GPU backends |
 | Heavy-output reliability | Production hardened | Hardening in progress | Untested at parity load | Untested at parity load | Deterministic progress-output soak tests |
 | Grapheme clusters / emoji | Yes | Partial | Partial | Partial | Shared width/grapheme engine |
 | Ligatures / font features | Yes | Native-font partial | No | Native-font partial | Shaping abstraction |
-| OSC 8 hyperlinks / OSC 52 clipboard | Yes | Partial URL handling | No | No | Shared OSC metadata plane + permission policy |
+| OSC 8 hyperlinks / OSC 52 clipboard | Yes | Partial URL handling | Scaffold: OSC 52 policy hook, hyperlink config | No | Full OSC 8 metadata + OSC 52 policy in engine |
 | Synchronized output | Yes | No | No | No | DEC mode 2026 frame transactions |
 | Kitty keyboard protocol | Yes | No | No | No | Parser/input protocol phase |
 | Kitty graphics protocol | Yes | No | No | No | Image store + GPU texture path |
-| Shell integration | Prompt/CWD/command metadata, SSH helpers | No | No | No | zsh first, then PowerShell/bash/fish/nushell |
-| Quick terminal / automation / restoration | Yes on macOS | No | No | No | Session restoration, then automation and quick terminal |
+| Shell integration | Prompt/CWD/command metadata, SSH helpers | No | Partial: OSC 7 CWD, OSC 133 mark detection, command history, shell env hooks, plugin events | No | Full OSC 133 prompt semantics, command duration/status, jump-to-prompt |
+| Quick terminal / automation / restoration | Yes on macOS | No | Partial: control file/stemctl, session state save/restore, command palette/history overlay | No | Full session restoration, tabs/splits layouts, quick terminal |
+| Extensions / plugins | Limited / evolving | No | Yes: executable hook plugins, event protocol, config-driven wiring | No | Stable plugin API + more events |
 | Secure keyboard entry / accessibility | Native platform integration | No | No | Partial native accessibility | macOS secure input + accessibility audit |
-| Embeddable terminal core | `libghostty` | Internal core | Internal core | Temporary duplicate | Stable Krypton terminal-core API |
+| Embeddable terminal core | `libghostty` | Internal core | `stem_core.k` wrapper API (feed/render/cursor/meta/scrollback) | Temporary duplicate | Stable Krypton terminal-core ABI + PTY/session API |
 
 ## Delivery order
 
@@ -107,3 +108,21 @@ them. Behavioral fixes move into the shared core whenever possible. Every
 renderer must survive sustained output, fragmented escape sequences, malformed
 UTF-8, live resize, and split-pane stress before being marked complete.
 
+
+
+## Current Linux/Hyprland status
+
+Implemented in `stem_wl.ks` / `config.k`:
+- Plaintext + flat JSON config (`stem.conf` / `stem.json`), XDG discovery, includes/theme/profile merge, validation.
+- 2-pane splits (vertical/horizontal), focus/close/swap/grow/shrink/equalize, layout persistence in session file.
+- Command history overlay, command palette, plugin hooks, `stemctl` control plane.
+- OSC 7 cwd, OSC 133 prompt marks, OSC 52 policy hook, OSC 8 link marking, DEC 2026 basic buffering, basic Kitty CSI-u encoding.
+- Session restore, debug/fps/perf overlays, Hyprland rules/desktop/control hooks.
+- `stem_core.k` embeddable core wrapper API.
+
+Still incomplete for full Ghostty parity:
+- Wayland tabs and multi-split layout engine.
+- GPU renderer backend.
+- Font shaping/ligatures/fallback/grapheme clusters/emoji ZWJ.
+- Full OSC 8 URL storage/round-trip, full Kitty keyboard protocol, full DEC 2026 engine semantics, image protocols.
+- Full libghostty-equivalent stable ABI/PTY/session embedding.

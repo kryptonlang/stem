@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# stemctl - simple control-plane client for STEM.
+# Writes commands to STEM control_file (default ~/.config/stem/ctl).
+
+CONF="${STEM_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/stem/stem.conf}"
+CTL=""
+if [[ -f "$CONF" ]]; then
+  CTL="$(grep -E '^[[:space:]]*control_file[[:space:]]*=' "$CONF" | tail -n1 | sed 's/^[^=]*=//; s/[[:space:]]*#.*$//; s/^[[:space:]]*//; s/[[:space:]]*$//')"
+fi
+CTL="${CTL:-${XDG_CONFIG_HOME:-$HOME/.config}/stem/ctl}"
+CTL="${CTL/#\~/$HOME}"
+
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+  reload)   printf 'reload_config\n' >> "$CTL" ;;
+  quit|close) printf 'quit\n' >> "$CTL" ;;
+  clear)    printf 'write_pty:\f\n' >> "$CTL" ;;
+  notify)   printf 'notify:%s\n' "$*" >> "$CTL" ;;
+  title)    printf 'set_title:%s\n' "$*" >> "$CTL" ;;
+  open)     printf 'open:%s\n' "$*" >> "$CTL" ;;
+  send|write_pty) printf 'write_pty:%s\n' "$*" >> "$CTL" ;;
+  history)  printf 'history\n' >> "$CTL" ;;
+  doctor|validate)
+    echo "STEM doctor"
+    echo "config: $CONF"
+    [[ -f "$CONF" ]] && echo "  [ok] config exists" || echo "  [warn] config missing"
+    if [[ -f "$CONF" ]]; then
+      if grep -qE '^[[:space:]]*\{' "$CONF"; then
+        command -v python3 >/dev/null && python3 -m json.tool "$CONF" >/dev/null && echo "  [ok] JSON config valid" || echo "  [warn] JSON config could not be validated"
+      else
+        bad=$(grep -nEv '^[[:space:]]*(#|;|$|[A-Za-z0-9_.-]+[[:space:]]*[=:])' "$CONF" || true)
+        if [[ -n "$bad" ]]; then echo "  [warn] invalid lines:"; echo "$bad"; else echo "  [ok] config syntax looks valid"; fi
+      fi
+    fi
+    echo "control_file: $CTL"
+    command -v wl-copy >/dev/null && echo "  [ok] wl-copy" || echo "  [warn] wl-copy missing"
+    command -v wl-paste >/dev/null && echo "  [ok] wl-paste" || echo "  [warn] wl-paste missing"
+    command -v notify-send >/dev/null && echo "  [ok] notify-send" || echo "  [warn] notify-send missing"
+    command -v xdg-open >/dev/null && echo "  [ok] xdg-open" || echo "  [warn] xdg-open missing"
+    command -v base64 >/dev/null && echo "  [ok] base64" || echo "  [warn] base64 missing (OSC 52)"
+    [[ -n "${WAYLAND_DISPLAY:-}" ]] && echo "  [ok] WAYLAND_DISPLAY=$WAYLAND_DISPLAY" || echo "  [warn] WAYLAND_DISPLAY not set"
+    [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] && echo "  [ok] Hyprland detected" || echo "  [info] Hyprland not detected"
+    ;;
+  help|--help|-h)
+    cat <<'EOF'
+stemctl - STEM control client
+Usage:
+  stemctl reload
+  stemctl quit
+  stemctl clear
+  stemctl notify <message>
+  stemctl title <title>
+  stemctl open <url-or-path>
+  stemctl send <text>
+  stemctl doctor
+  stemctl validate
+EOF
+    ;;
+  *)
+    echo "unknown command: $cmd" >&2
+    exit 1
+    ;;
+esac

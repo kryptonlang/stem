@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=STEM
+GenericName=Terminal Emulator
+Comment=Krypton-native terminal for Hyprland and Wayland
+Exec=stem-wl
+Icon=stem
+Terminal=false
+Categories=System;TerminalEmulator;
+Keywords=terminal;shell;prompt;commandline;
+StartupWMClass=stem
+Actions=NewWindow;
+
+[Desktop Action NewWindow]
+Name=New Window
+Exec=stem-wl

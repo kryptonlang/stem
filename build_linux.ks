@@ -1,12 +1,13 @@
-// build_linux.ks — build stem on Linux (x86_64 / aarch64).
+// build_linux.ks — build STEM on Linux (x86_64 / aarch64).
 //
-// Pure-Krypton build path: kcc compiles run.k to a static, syscall-only ELF.
+// Pure-Krypton build path: kcc compiles STEM sources to native ELF binaries.
 // No gcc/cmake/clang at user-build time once kcc is bootstrapped.
 //
 // Usage:
-//   kcc -r build_linux.ks            # builds ./stem from run.k
-//   kcc -r build_linux.ks --run      # ... then runs it once
-//   kcc -r build_linux.ks --ks       # builds the KryptScript entry (run.ks)
+//   kcc -r build_linux.ks            # builds ./stem CLI from run.k
+//   kcc -r build_linux.ks --ks       # builds CLI from run.ks
+//   kcc -r build_linux.ks --wl       # builds ./stem-wl Wayland/Hyprland frontend
+//   kcc -r build_linux.ks --run      # build then run the selected target
 //
 // kcc resolution: `kcc` on PATH, else the Linux driver seed in $KRYPTON_ROOT
 // (default ../krypton).
@@ -42,22 +43,24 @@ just run {
     }
 
     let src = "run.k"
+    let outName = "stem"
     let run = 0
     let i = 0
     while i < argCount() {
         let a = arg(toStr(i))
         if a == "--run" { run = 1 }
         if a == "--ks"  { src = "run.ks" }
+        if a == "--wl"  { src = "stem_wl.ks"  outName = "stem-wl" }
         i = i + 1
     }
 
-    print("build_linux.ks: " + src + " -> stem")
-    let out = exec(kcc + " --native " + src + " -o stem 2>&1")
+    print("build_linux.ks: " + src + " -> " + outName)
+    let out = exec(kcc + " --native " + src + " -o " + outName + " 2>&1")
     if out != "" { print(out) }
-    if isExec("stem") != "yes" {
-        print("build_linux.ks: build failed — stem not produced")
+    if isExec(outName) != "yes" {
+        print("build_linux.ks: build failed — " + outName + " not produced")
         emit 1
     }
-    print("build_linux.ks: built stem (" + trim(exec("wc -c < stem | tr -d ' '")) + " bytes, static ELF)")
-    if run == 1 { exec("./stem") }
+    print("build_linux.ks: built " + outName + " (" + trim(exec("wc -c < " + outName + " | tr -d ' '")) + " bytes)")
+    if run == 1 { exec("./" + outName) }
 }
