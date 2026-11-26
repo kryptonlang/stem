@@ -19,6 +19,11 @@
 // Pure Krypton — no syscalls beyond readFile/writeFile/environ/exec.
 module config
 
+// Wrapper to avoid Krypton x86_64 runtime bug with multiple direct readFile calls.
+func _confReadFile(p) {
+    emit readFile(p)
+}
+
 // ── paths ────────────────────────────────────────────────────────────────────
 
 func confDir() {
@@ -31,15 +36,11 @@ func confDir() {
 func confPath() {
     let p = environ("STEM_CONF")
     if p != "" { emit p }
-    let c = confDir() + "/stem.conf"
-    if readFile(c) != "" { emit c }
-    let j = confDir() + "/stem.json"
-    if readFile(j) != "" { emit j }
-    let c2 = confDir() + "/config"
-    if readFile(c2) != "" { emit c2 }
-    let j2 = confDir() + "/config.json"
-    if readFile(j2) != "" { emit j2 }
-    emit confDir() + "/stem.conf"
+    // Simple default: do not probe files here (Krypton x86_64 runtime bug
+    // with environ + readFile + emit in one function). confLoad() probes.
+    let xdg = environ("XDG_CONFIG_HOME")
+    if xdg != "" { emit xdg + "/stem/stem.conf" }
+    emit environ("HOME") + "/.config/stem/stem.conf"
 }
 
 func _confIsJsonPath(p) {
@@ -222,16 +223,16 @@ func confNormalize(txt, path) {
 // Raw config text ("" if the file does not exist). Supports key=value conf and JSON.
 func confLoad() {
     let p = confPath()
-    let txt = readFile(p)
+    let txt = _confReadFile(p)
     if txt != "" { emit confNormalize(txt, p) }
     let alt1 = confDir() + "/stem.json"
-    txt = readFile(alt1)
+    txt = _confReadFile(alt1)
     if txt != "" { emit confNormalize(txt, alt1) }
     let alt2 = confDir() + "/config"
-    txt = readFile(alt2)
+    txt = _confReadFile(alt2)
     if txt != "" { emit confNormalize(txt, alt2) }
     let alt3 = confDir() + "/config.json"
-    txt = readFile(alt3)
+    txt = _confReadFile(alt3)
     if txt != "" { emit confNormalize(txt, alt3) }
     emit ""
 }
@@ -288,11 +289,31 @@ func _confStripInlineComment(v) {
     // only when the whole trimmed value looks like #RRGGBB. Otherwise strip at #.
     let t = trim(v)
     if len(t) > 0 && substring(t, 0, 1) == "#" {
-        // Value itself starts with # (color) — keep it, but strip a later " # ...".
-        let rest = substring(t, 1, len(t))
-        let h = indexOf(rest, "#")
-        if h >= 0 { emit trim(substring(t, 0, h + 1)) }
-        emit t
+        // Treat as a color only if it looks like #RGB or #RRGGBB.
+        let hexpart = substring(t, 1, len(t))
+        let isColor = 0
+        if len(hexpart) == 3 || len(hexpart) == 6 {
+            isColor = 1
+            let i = 0
+            while i < len(hexpart) {
+                let ch = substring(hexpart, i, i + 1)
+                let isHex = 0
+            if ch >= "0" && ch <= "9" { isHex = 1 }
+            if ch >= "a" && ch <= "f" { isHex = 1 }
+            if ch >= "A" && ch <= "F" { isHex = 1 }
+            if isHex == 0 { isColor = 0 }
+                i = i + 1
+            }
+        }
+        if isColor == 1 {
+            // Color value — keep it, but strip a later " # ...".
+            let rest = substring(t, 1, len(t))
+            let h = indexOf(rest, "#")
+            if h >= 0 { emit trim(substring(t, 0, h + 1)) }
+            emit t
+        }
+        // Otherwise it's a comment, not a color: strip everything.
+        emit ""
     }
     let h = indexOf(t, "#")
     if h >= 0 { emit trim(substring(t, 0, h)) }
@@ -396,7 +417,8 @@ func confLoadMerged() {
         if len(line) > 8 && substring(line, 0, 8) == "include " {
             let p = trim(substring(line, 8, len(line)))
             p = confExpandPath(p)
-            let inc = confNormalize(readFile(p), p)
+            let _incTxt = _confReadFile(p)
+            let inc = confNormalize(_incTxt, p)
             if inc != "" { out = out + fromCharCode(10) + inc }
         } else {
             let eq = indexOf(line, "=")
@@ -404,7 +426,8 @@ func confLoadMerged() {
                 let k = trim(substring(line, 0, eq))
                 if k == "include" || k == "include_file" || k == "theme_file" || k == "profile_file" {
                     let p = confExpandPath(_confStripInlineComment(substring(line, eq + 1, len(line))))
-                    let inc = confNormalize(readFile(p), p)
+                    let _incTxt = _confReadFile(p)
+            let inc = confNormalize(_incTxt, p)
                     if inc != "" { out = out + fromCharCode(10) + inc }
                 }
             }

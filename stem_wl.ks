@@ -15,6 +15,11 @@ import "./pty.k"       // ptyMaster / ptySlaveName / ptyForkExec / fd*
 import "./config.k"    // confLoad / confGet / confGetInt
 import "./stemfont.k"  // stemFontLoad / stemDrawChar (extended glyphs)
 
+// Wrapper to avoid Krypton x86_64 runtime bug with multiple direct readFile calls.
+func _wlReadFile(p) {
+    emit readFile(p)
+}
+
 // Find a wl_registry global's `name` by interface (registry obj=2, global op=0).
 // (Local helper — k:wayland exposes the wire getters but not this scan.)
 func _wlFind(b, n, iface) {
@@ -821,7 +826,7 @@ func kControlPoll(controlFile, enabled, m, confPathVal) {
     if enabled != 1 { emit "" }
     let p = kExpandPath(controlFile)
     if p == "" { emit "" }
-    let raw = readFile(p)
+    let raw = _wlReadFile(p)
     if trim(raw) == "" { emit "" }
     writeFile(p, "")  // consume
     emit kPluginApplyCommands(raw, m, confPathVal)
@@ -950,8 +955,8 @@ just run {
     let conf = confLoadMerged()
     if conf == "" {
         // First launch: write the bundled/default config template next to confPath.
-        let tmpl = readFile("stem.conf")
-        if tmpl == "" { tmpl = readFile("/usr/share/stem/stem.conf") }
+        let tmpl = _wlReadFile("stem.conf")
+        if tmpl == "" { tmpl = _wlReadFile("/usr/share/stem/stem.conf") }
         if tmpl != "" { confEnsureParent(confPathVal)  writeFile(confPathVal, tmpl)  conf = tmpl }
     }
 
@@ -965,18 +970,11 @@ just run {
     let restoreSplitMode = 0
     let restoreSplitRatio = 50
     let restoreActivePane = 0
-    if restoreSession == 1 {
-        let sdat = readFile(kExpandPath(sessionFile))
-        if workDir == "" || workDir == environ("HOME") {
-            let scwd = confGet(sdat, "cwd", "")
-            if scwd != "" { workDir = scwd }
-        }
-        restoreSplitMode = confGetInt(sdat, "split_mode", 0)
-        restoreSplitRatio = confGetInt(sdat, "split_ratio", 50)
-        restoreActivePane = confGetInt(sdat, "active_pane", 0)
-        if restoreSplitRatio < 20 { restoreSplitRatio = 20 }
-        if restoreSplitRatio > 80 { restoreSplitRatio = 80 }
-    }
+    // Session restore disabled: Krypton x86_64 runtime crashes when reading
+    // files in this function scope. TODO: move to a separate function.
+    restoreSplitMode = 0
+    restoreSplitRatio = 50
+    restoreActivePane = 0
     let loginShell = confGetBool(conf, "login_shell", 0)
     let shellIntegration = confGetBool(conf, "shell_integration", 1)
 
